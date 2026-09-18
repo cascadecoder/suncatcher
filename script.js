@@ -145,18 +145,20 @@ function initLayers() {
 }
 initLayers()
 
+
+
 class Building {
     constructor(type, layer) {
         let buildings = buildingLayers[layer]
         this.x = 0
         this.y = 0
-        this.w = Math.random() * (type.widthrange[1] - type.widthrange[0]) + type.widthrange[0]
-        this.h = Math.random() * (type.heightrange[1] - type.heightrange[0]) + type.heightrange[0]
+        this.w = Math.round(Math.random() * (type.widthrange[1] - type.widthrange[0]) + type.widthrange[0])
+        this.h = Math.round(Math.random() * (type.heightrange[1] - type.heightrange[0]) + type.heightrange[0])
         this.windows = []
         this.layer = layer;
         this.y = GROUND_LEVEL - this.h;
         if (buildings.length == 0) {
-            this.x = Math.random() * (c.width - this.w - buildingPadding * 2) + buildingPadding;
+            this.x = Math.round(Math.random() * (c.width - this.w - buildingPadding * 2) + buildingPadding);
 
         } else {
             let available = []
@@ -177,9 +179,9 @@ class Building {
                 } else {
                     if (type.widthrange[0] < (xend - xstart)) {
                         // change size to fit
-                        this.w = Math.random() * ((xend - xstart) - type.widthrange[0]) + type.widthrange[0]
+                        this.w = Math.round(Math.random() * ((xend - xstart) - type.widthrange[0]) + type.widthrange[0])
                         let diff = (xend - xstart) - this.w
-                        available.push(xstart + Math.random() * diff) // random spot within range
+                        available.push(xstart + Math.round(Math.random() * diff)) // random spot within range
                         console.log("Fit with new width: " + this.w)
                     } else {
                         // find somewhere else
@@ -194,13 +196,13 @@ class Building {
             if (this.w <= (xend - xstart)) {
                 // yeah we good
                 let diff = (xend - xstart) - this.w
-                available.push(xstart + Math.random() * diff) // random spot within range
+                available.push(xstart + Math.round(Math.random() * diff)) // random spot within range
             } else {
                 if (type.widthrange[0] < (xend - xstart)) {
                     // change size to fit
-                    this.w = Math.random() * ((xend - xstart) - type.widthrange[0]) + type.widthrange[0]
+                    this.w = Math.round(Math.random() * ((xend - xstart) - type.widthrange[0]) + type.widthrange[0])
                     let diff = (xend - xstart) - this.w
-                    available.push(xstart + Math.random() * diff) // random spot within range
+                    available.push(xstart + Math.round(Math.random() * diff)) // random spot within range
                 } else {
                     //cooked
                 }
@@ -230,12 +232,47 @@ class Building {
         }
 
         buildingLayers[layer] = buildings;
+
+        this.createWindows()
+    }
+    createWindows() {
+        let window = {
+            height: Math.round(8*Math.random()+10),
+            width: Math.round(5*Math.random()+8),
+            padding: 10 + Math.round(7*Math.random())
+        }
+
+        let hamt = Math.floor((this.w-window.padding/2) / (window.width+window.padding))
+        let vamt = Math.floor((this.h-window.padding/2) / (window.height+window.padding))
+        let hspan = hamt * (window.width+window.padding)-window.padding
+        let vspan = vamt * (window.height+window.padding)-window.padding
+        hspan = this.w - hspan
+        vspan = this.h - vspan
+        for (let x = 0; x < hamt; x++) {
+            let cx = this.x +hspan / 2
+            let cy = this.y + vspan/2
+            for (let y = 0; y < vamt; y++) {
+                this.windows.push(new Rect(cx+x*(window.width+window.padding), cy+y*(window.height+window.padding), window.width,window.height,gray(120),1))
+            }
+        }
+        this.hspan = hspan
+        this.hamt = hamt;
+
+        //alert(this.windows)
     }
     draw() {
         GLOBAL_GRAY = - this.layer * 5
         ctx.fillStyle = gray(50)
         ctx.fillRect(this.x,this.y,this.w,this.h)
         this.rect.draw()
+        for (let i = 0; i < this.windows.length; i++) {
+            this.windows[i].draw()
+        }
+
+        /*ctx.fillStyle = gray(200);
+        ctx.fillText(this.hspan + " " + this.w + " " + this.hamt,this.x,this.y)
+        ctx.fillRect(this.x,this.y,this.hspan,4)
+        ctx.fillRect(this.x,this.y+4,this.w,4)*/
 
         GLOBAL_GRAY = 0
     }
