@@ -133,8 +133,8 @@ class BuildingType {
     }
 }
 // Create building types
-new BuildingType("skyscaper", 100, [50, 150], [450, c.height - GROUND_LEVEL - buildingPadding])
-new BuildingType("office", 80, [120, 200], [200, 350])
+new BuildingType("skyscraper", 100, [40, 120], [450, c.height - GROUND_LEVEL - buildingPadding])
+new BuildingType("office", 80, [120, 200], [160, 250])
 new BuildingType("garage", 50, [225, 350], [50, 150])
 
 function initLayers() {
@@ -145,7 +145,39 @@ function initLayers() {
 }
 initLayers()
 
+class Window extends Rect {
+    constructor(x,y,w,h,c,s) {
+        super(x,y,w,h,c,s)
 
+        this.on = false
+        this.gradient = 0
+    }
+
+    switch() {
+        this.on = !this.on;
+    }
+
+    wdraw() {
+        if (this.on) {
+            this.gradient += 0.1;
+            if (this.gradient >= 1) {
+                this.gradient = 1;
+            }
+            //ctx.globalAlpha = this.gradient;
+            ctx.fillStyle = gray(140)
+            ctx.fillRect(this.x,this.y,this.w,this.h)
+        } else {
+            this.gradient -= 0.1;
+            if (this.gradient <= 0) {
+                this.gradient = 0;
+            }
+            //ctx.globalAlpha = this.gradient;
+        }
+
+        ctx.globalAlpha = 1;
+        this.draw()
+    }
+}
 
 class Building {
     constructor(type, layer) {
@@ -161,6 +193,7 @@ class Building {
             this.x = Math.round(Math.random() * (c.width - this.w - buildingPadding * 2) + buildingPadding);
 
         } else {
+            // get ready for the worst code every written
             let available = []
             for (let i = 0; i < buildings.length; i++) {
                 let xstart;
@@ -170,22 +203,18 @@ class Building {
                     xstart = buildings[i - 1].x + buildings[i - 1].w + buildingPadding;
                 }
                 let xend = buildings[i].x - buildingPadding;
-                console.log("Space: " + Math.round(xstart) + " to " + Math.round(xend) + " | " + "Width: " + Math.round(this.w))
                 if (this.w <= (xend - xstart)) {
                     // yeah we good
                     let diff = (xend - xstart) - this.w
                     available.push(xstart + Math.random() * diff) // random spot within range
-                    console.log("Fit perfectly!")
                 } else {
                     if (type.widthrange[0] < (xend - xstart)) {
                         // change size to fit
                         this.w = Math.round(Math.random() * ((xend - xstart) - type.widthrange[0]) + type.widthrange[0])
                         let diff = (xend - xstart) - this.w
                         available.push(xstart + Math.round(Math.random() * diff)) // random spot within range
-                        console.log("Fit with new width: " + this.w)
                     } else {
                         // find somewhere else
-                        console.log("Didn't fit")
                         continue;
                     }
                 }
@@ -237,9 +266,9 @@ class Building {
     }
     createWindows() {
         let window = {
-            height: Math.round(8*Math.random()+10),
-            width: Math.round(5*Math.random()+8),
-            padding: 10 + Math.round(7*Math.random())
+            height: 0.6*Math.round((8*Math.random()+10)),
+            width: 0.7*Math.round(5*Math.random()+8),
+            padding: 0.5*(10 + Math.round(7*Math.random()))
         }
 
         let hamt = Math.floor((this.w-window.padding/2) / (window.width+window.padding))
@@ -252,7 +281,11 @@ class Building {
             let cx = this.x +hspan / 2
             let cy = this.y + vspan/2
             for (let y = 0; y < vamt; y++) {
-                this.windows.push(new Rect(cx+x*(window.width+window.padding), cy+y*(window.height+window.padding), window.width,window.height,gray(120),1))
+                let w = new Window(cx+x*(window.width+window.padding), cy+y*(window.height+window.padding), window.width,window.height,gray(120),1)
+                if (Math.random() < 1/10) {
+                    w.on = true;
+                }
+                this.windows.push(w)
             }
         }
         this.hspan = hspan
@@ -266,7 +299,10 @@ class Building {
         ctx.fillRect(this.x,this.y,this.w,this.h)
         this.rect.draw()
         for (let i = 0; i < this.windows.length; i++) {
-            this.windows[i].draw()
+            if (SCRIBBLE_TICK == 0 && Math.random() < 1/400) {
+                this.windows[i].switch()
+            }
+            this.windows[i].wdraw()
         }
 
         /*ctx.fillStyle = gray(200);
@@ -275,6 +311,125 @@ class Building {
         ctx.fillRect(this.x,this.y+4,this.w,4)*/
 
         GLOBAL_GRAY = 0
+    }
+}
+let clouds = []
+class Cloud { // multiple rectangles stacked on/under each other
+    constructor(x,y,w,h,col,s, v) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h; // max height of cloud
+        this.lines = []
+        this.rects = []
+        this.c = col;
+        this.s = s;
+        this.v = v;
+        if (Math.random() > 0.5) {
+            this.v *= -1;
+            this.x = c.width - this.x
+        }
+        if (this.y - this.h < 10) {
+            this.y = this.h+10
+        }
+
+        this.create()
+
+        clouds.push(this)
+    }
+
+    create() {
+        let dir = "up"
+        let minstep = {
+            x: 10,
+            y: 5
+        }
+        let maxstep = {
+            x: 40,
+            y: 10
+        }
+        let x = this.x;
+        let y = this.y - maxstep.y * Math.random() * 2;
+        this.line(this.x,this.y,x,y)
+        for (let i = 0; i < 100; i++) {
+            let prevx = x;
+            let prevy = y;
+            let step;
+            if (dir == "up") {
+                step = Math.random() * (maxstep.y-minstep.y) + minstep.y
+                if (y-step < this.y-this.h) { // goes over limit
+                    if (this.h-(y-this.y) < minstep.y) { // too small of gap
+                        y += step;
+                    } else {
+                        y = this.y-this.h;
+                    }
+                } else {
+                    y -= step
+
+                }
+                dir = "right"
+            } else if (dir == "down") {
+                step = Math.random() * (maxstep.y-minstep.y) + minstep.y
+                if (y+step > this.y - minstep.y) {
+                    if (Math.abs(y-this.y) < minstep.y*2) {
+                        y -= step;
+                    } else {
+                        y=this.y-minstep.y
+                    }
+                } else {
+                    y += step;
+                }
+                dir = "right"
+            } else {
+                step = Math.random() * (maxstep.x-minstep.x) + minstep.x
+                if (x+step > this.x+this.w) {
+                    x = this.x + this.w;
+                } else {
+                    x += step;
+                }
+
+                if (Math.random() > (x-this.x)/this.w) {
+                    dir = "up";
+                } else {
+                    dir = "down";
+                }
+            }
+            if (x >= this.x + this.w-minstep.x) { // just change w instead of cutting close
+                this.w = x-this.x;
+                this.line(prevx,prevy,x,y)
+                break;
+            }
+            this.line(prevx,prevy,x,y)
+        }
+        this.line(x,y,this.x+this.w,this.y)
+
+        this.line(this.x,this.y,this.x+this.w,this.y)
+    }
+
+    draw() {
+        let prevx, prevy
+        let move = (SCRIBBLE_TICK == 0)
+        for (let i = 0; i < this.lines.length; i++) {
+            if (move) {
+                this.lines[i].x1 += this.v;
+                this.lines[i].x2 += this.v;
+            }
+            if (this.lines[i].y2 == this.lines[i].y1) { // fill in cloud
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = gray(this.c-50);
+                ctx.fillRect(prevx,prevy,this.lines[i].x2-prevx,this.y-prevy)
+                ctx.globalAlpha = 1
+            }
+            prevx = this.lines[i].x2;
+            prevy = this.lines[i].y2
+
+            this.lines[i].draw()
+            
+        }
+    }
+
+    line(x1,y1,x2,y2) {
+        this.lines.push(new Scribble(x1,y1,x2,y2,gray(this.c),this.s))
     }
 }
 
@@ -288,7 +443,6 @@ function build(layer) {
             break;
         }
     }
-    console.log(layer + " : " + buildingLayers)
     new Building(buildingTypes[type], layer)
 }
 
@@ -301,11 +455,27 @@ function buildDraw() {
     }
 }
 
+function newCloud(x) {
+    new Cloud (x,Math.random()*GROUND_LEVEL*0.75,Math.random()*150+50,Math.random()*30+30,(200),1.5,Math.random()*2+0.5)
+}
+
+function cloudDraw() {
+    for (let i = 0; i < clouds.length; i++) {
+        clouds[i].draw()
+    }
+}
+
 let ground = new Scribble(0, GROUND_LEVEL, c.width, GROUND_LEVEL, gray(100), 4)
 
 for (let i = 0; i < 30; i++) {
     build(Math.floor(Math.random() * buildingLayerAmt))
 }
+
+for (let i = 0; i < Math.random()*2+3; i++) {
+    newCloud(Math.random()*c.width)
+}
+
+
 
 
 var fps = Math.round(1000 / 30)
@@ -320,8 +490,13 @@ function tick() {
     SCRIBBLE_TICK += 1
     if (SCRIBBLE_TICK >= SCRIBBLE_CHANGE) {
         SCRIBBLE_TICK = 0;
-    }
 
+        // randomly create cloud
+        if (Math.random() < 1/20) {
+            newCloud(-100*Math.random()-200)
+        }
+    }
+    cloudDraw()
     buildDraw()
     ground.draw()
 }
