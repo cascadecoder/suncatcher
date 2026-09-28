@@ -15,6 +15,55 @@ let GLOBAL_GRAY = 0;
 
 let GROUND_LEVEL = c.height * 2 / 3
 
+// time stuff
+let date = new Date()
+let totalseconds = date.getHours() * 60 * 60 + date.getMinutes() * 60 + date.getSeconds()
+let midseconds = 12 * 60 * 60
+let endseconds = midseconds * 2
+let tr = totalseconds / endseconds
+let tposts = [0, 0.25, 0.5, 0.75, 1] // night 0.75-0.25, day 0.25-0.75
+let isnight = tposts[1] > tr || tr > tposts[3]
+let moonaxis, sunaxis;
+
+let mouse = {
+    x: 0,
+    y: 0
+}
+
+function calculateTimes() {
+    date = new Date()
+    totalseconds = date.getHours() * 60 * 60 + date.getMinutes() * 60 + date.getSeconds()
+    tr = totalseconds / endseconds
+
+    //tr = mouse.y / c.height
+
+    isnight = tposts[1] > tr || tr > tposts[3]
+    if (isnight) {
+        if (tr > tposts[3]) {
+            moonaxis = (tr - tposts[3]) / tposts[1]
+        } else if (tr < tposts[1]) {
+            moonaxis = (tposts[1] - tr) / tposts[1]
+        } else {
+            moonaxis = 0
+        }
+        sunaxis = 0
+    } else {
+        if (tr < tposts[2]) {
+            sunaxis = (tr - tposts[1]) / tposts[1]
+        } else if (tr > tposts[2]) {
+            sunaxis = (tposts[3] - tr) / tposts[1]
+        } else {
+            sunaxis = 1
+        }
+        moonaxis = 0
+    }
+
+}
+
+calculateTimes()
+console.log("Sun axis: " + sunaxis + " | Moon axis: " + moonaxis)
+
+
 function distTo(x1, y1, x2, y2) {
     return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
 }
@@ -95,7 +144,7 @@ class Scribble {
 }
 
 class Rect {
-    constructor(x, y, w, h, c, s) {
+    constructor(x, y, w, h, c, s, filled, fillcol) {
         this.x = x;
         this.y = y;
         this.w = w;
@@ -104,6 +153,11 @@ class Rect {
         this.s = s;
         this.scribs = []
         this.makeScribbles()
+
+        if (filled) {
+            this.filled = true;
+            this.fillcol = fillcol;
+        }
     }
     makeScribbles() {
         this.scribs.push(new Scribble(this.x, this.y, this.x, this.y + this.h, this.c, this.s))
@@ -112,9 +166,42 @@ class Rect {
         this.scribs.push(new Scribble(this.x, this.y + this.h, this.x + this.w, this.y + this.h, this.c, this.s))
     }
     draw() {
+        if (this.filled) {
+            ctx.fillStyle = this.fillcol;
+            ctx.fillRect(this.x, this.y, this.w, this.h)
+        }
         for (let i = 0; i < this.scribs.length; i++) {
             this.scribs[i].draw()
         }
+    }
+    moveTo(x, y) {
+        let dx = 0;
+        if (!x) {
+
+        } else {
+            dx = x - this.x
+            this.x = x;
+        }
+        let dy = 0;
+        if (!y) {
+
+        } else {
+            dy = y - this.y
+            this.y = y
+        }
+
+
+
+
+        for (let i = 0; i < this.scribs.length; i++) {
+            let s = this.scribs[i]
+            s.x1 += dx;
+            s.x2 += dx;
+            s.y1 += dy;
+            s.y2 += dy;
+        }
+
+
     }
 }
 let buildingLayers = []
@@ -138,7 +225,7 @@ new BuildingType("office", 80, [120, 200], [160, 250])
 new BuildingType("garage", 50, [225, 350], [50, 150])
 
 function initLayers() {
-    for (let i = 0; i < buildingLayerAmt+1; i++) {
+    for (let i = 0; i < buildingLayerAmt + 1; i++) {
         let a = []
         buildingLayers.push(a)
     }
@@ -146,8 +233,8 @@ function initLayers() {
 initLayers()
 
 class Window extends Rect {
-    constructor(x,y,w,h,c,s) {
-        super(x,y,w,h,c,s)
+    constructor(x, y, w, h, c, s) {
+        super(x, y, w, h, c, s)
 
         this.on = false
         this.gradient = 0
@@ -165,7 +252,7 @@ class Window extends Rect {
             }
             //ctx.globalAlpha = this.gradient;
             ctx.fillStyle = gray(140)
-            ctx.fillRect(this.x,this.y,this.w,this.h)
+            ctx.fillRect(this.x, this.y, this.w, this.h)
         } else {
             this.gradient -= 0.1;
             if (this.gradient <= 0) {
@@ -182,6 +269,7 @@ class Window extends Rect {
 class Building {
     constructor(type, layer) {
         let buildings = buildingLayers[layer]
+        this.type = type.name
         this.x = 0
         this.y = 0
         this.w = Math.round(Math.random() * (type.widthrange[1] - type.widthrange[0]) + type.widthrange[0])
@@ -243,15 +331,16 @@ class Building {
             }
             this.x = available[Math.floor(Math.random() * available.length)]
         }
+        GLOBAL_GRAY = - this.layer * 5
         this.rect = new Rect(this.x, this.y, this.w, this.h, gray(200), 1.5)
-
+        GLOBAL_GRAY = 0
         // sort building into the bulidings
         let position = false
         for (let i = 0; i < buildings.length; i++) {
             if (this.x > buildings[i].x) {
                 continue;
             } else {
-                buildings.splice(i,0,this)
+                buildings.splice(i, 0, this)
                 position = true
                 break;
             }
@@ -260,29 +349,37 @@ class Building {
             buildings.push(this)
         }
 
-        buildingLayers[layer] = buildings;
-
-        this.createWindows()
-    }
-    createWindows() {
-        let window = {
-            height: 0.6*Math.round((8*Math.random()+10)),
-            width: 0.7*Math.round(5*Math.random()+8),
-            padding: 0.5*(10 + Math.round(7*Math.random()))
+        if (!buildings.includes(this)) {
+            return
         }
 
-        let hamt = Math.floor((this.w-window.padding/2) / (window.width+window.padding))
-        let vamt = Math.floor((this.h-window.padding/2) / (window.height+window.padding))
-        let hspan = hamt * (window.width+window.padding)-window.padding
-        let vspan = vamt * (window.height+window.padding)-window.padding
+        buildingLayers[layer] = buildings;
+
+        this.bonus = []
+
+        this.createWindows()
+        this.createBonus()
+    }
+    createWindows() {
+        GLOBAL_GRAY = - this.layer * 5
+        let window = {
+            height: 0.6 * Math.round((8 * Math.random() + 10)),
+            width: 0.7 * Math.round(5 * Math.random() + 8),
+            padding: 0.5 * (10 + Math.round(7 * Math.random()))
+        }
+
+        let hamt = Math.floor((this.w - window.padding / 2) / (window.width + window.padding))
+        let vamt = Math.floor((this.h - window.padding / 2) / (window.height + window.padding))
+        let hspan = hamt * (window.width + window.padding) - window.padding
+        let vspan = vamt * (window.height + window.padding) - window.padding
         hspan = this.w - hspan
         vspan = this.h - vspan
         for (let x = 0; x < hamt; x++) {
-            let cx = this.x +hspan / 2
-            let cy = this.y + vspan/2
+            let cx = this.x + hspan / 2
+            let cy = this.y + vspan / 2
             for (let y = 0; y < vamt; y++) {
-                let w = new Window(cx+x*(window.width+window.padding), cy+y*(window.height+window.padding), window.width,window.height,gray(120),1)
-                if (Math.random() < 1/10) {
+                let w = new Window(cx + x * (window.width + window.padding), cy + y * (window.height + window.padding), window.width, window.height, gray(130), 1)
+                if (Math.random() < 1 / 3) {
                     w.on = true;
                 }
                 this.windows.push(w)
@@ -291,19 +388,45 @@ class Building {
         this.hspan = hspan
         this.hamt = hamt;
 
+        this.window = window
+        GLOBAL_GRAY = 0
         //alert(this.windows)
+    }
+    createBonus() {
+        GLOBAL_GRAY = - this.layer * 5
+        if (this.type == "skyscraper" && Math.random() < 1 / 3) { // make rectangles stacked and vertical line
+            let w2 = Math.round((1 - Math.random() / 3) * this.w / 2);
+            let wx = this.x + (this.w - w2) / 2
+            let h2 = w2 / 3
+
+            this.bonus.push(new Rect(wx, this.y - h2, w2, h2 + 10, gray(200), 1.5, true, gray(50)))
+
+
+
+            let w3 = Math.ceil(w2 / 15);
+            wx = this.x + (this.w - w3) / 2;
+            let h3 = 50 + (1 - Math.random() / 2) * this.h / 10;
+
+            this.bonus.push(new Rect(wx, this.y - h2 - h3, w3, h3, gray(200), 1.5, true, gray(50)))
+        }
+        GLOBAL_GRAY = 0
     }
     draw() {
         GLOBAL_GRAY = - this.layer * 5
+        for (let i = 0; i < this.bonus.length; i++) {
+            this.bonus[i].draw()
+        }
         ctx.fillStyle = gray(50)
-        ctx.fillRect(this.x,this.y,this.w,this.h)
+        ctx.fillRect(this.x, this.y, this.w, this.h)
         this.rect.draw()
         for (let i = 0; i < this.windows.length; i++) {
-            if (SCRIBBLE_TICK == 0 && Math.random() < 1/400) {
+            if (SCRIBBLE_TICK == 0 && Math.random() < 1 / 800) {
                 this.windows[i].switch()
             }
             this.windows[i].wdraw()
         }
+
+
 
         /*ctx.fillStyle = gray(200);
         ctx.fillText(this.hspan + " " + this.w + " " + this.hamt,this.x,this.y)
@@ -315,7 +438,7 @@ class Building {
 }
 let clouds = []
 class Cloud { // multiple rectangles stacked on/under each other
-    constructor(x,y,w,h,col,s, v) {
+    constructor(x, y, w, h, col, s, v) {
         this.x = x;
         this.y = y;
         this.w = w;
@@ -330,7 +453,7 @@ class Cloud { // multiple rectangles stacked on/under each other
             this.x = c.width - this.x
         }
         if (this.y - this.h < 10) {
-            this.y = this.h+10
+            this.y = this.h + 10
         }
 
         this.create()
@@ -350,18 +473,18 @@ class Cloud { // multiple rectangles stacked on/under each other
         }
         let x = this.x;
         let y = this.y - maxstep.y * Math.random() * 2;
-        this.line(this.x,this.y,x,y)
+        this.line(this.x, this.y, x, y)
         for (let i = 0; i < 100; i++) {
             let prevx = x;
             let prevy = y;
             let step;
             if (dir == "up") {
-                step = Math.random() * (maxstep.y-minstep.y) + minstep.y
-                if (y-step < this.y-this.h) { // goes over limit
-                    if (this.h-(y-this.y) < minstep.y) { // too small of gap
+                step = Math.random() * (maxstep.y - minstep.y) + minstep.y
+                if (y - step < this.y - this.h) { // goes over limit
+                    if (this.h - (y - this.y) < minstep.y) { // too small of gap
                         y += step;
                     } else {
-                        y = this.y-this.h;
+                        y = this.y - this.h;
                     }
                 } else {
                     y -= step
@@ -369,41 +492,41 @@ class Cloud { // multiple rectangles stacked on/under each other
                 }
                 dir = "right"
             } else if (dir == "down") {
-                step = Math.random() * (maxstep.y-minstep.y) + minstep.y
-                if (y+step > this.y - minstep.y) {
-                    if (Math.abs(y-this.y) < minstep.y*2) {
+                step = Math.random() * (maxstep.y - minstep.y) + minstep.y
+                if (y + step > this.y - minstep.y) {
+                    if (Math.abs(y - this.y) < minstep.y * 2) {
                         y -= step;
                     } else {
-                        y=this.y-minstep.y
+                        y = this.y - minstep.y
                     }
                 } else {
                     y += step;
                 }
                 dir = "right"
             } else {
-                step = Math.random() * (maxstep.x-minstep.x) + minstep.x
-                if (x+step > this.x+this.w) {
+                step = Math.random() * (maxstep.x - minstep.x) + minstep.x
+                if (x + step > this.x + this.w) {
                     x = this.x + this.w;
                 } else {
                     x += step;
                 }
 
-                if (Math.random() > (x-this.x)/this.w) {
+                if (Math.random() > (x - this.x) / this.w) {
                     dir = "up";
                 } else {
                     dir = "down";
                 }
             }
-            if (x >= this.x + this.w-minstep.x) { // just change w instead of cutting close
-                this.w = x-this.x;
-                this.line(prevx,prevy,x,y)
+            if (x >= this.x + this.w - minstep.x) { // just change w instead of cutting close
+                this.w = x - this.x;
+                this.line(prevx, prevy, x, y)
                 break;
             }
-            this.line(prevx,prevy,x,y)
+            this.line(prevx, prevy, x, y)
         }
-        this.line(x,y,this.x+this.w,this.y)
+        this.line(x, y, this.x + this.w, this.y)
 
-        this.line(this.x,this.y,this.x+this.w,this.y)
+        this.line(this.x, this.y, this.x + this.w, this.y)
     }
 
     draw() {
@@ -416,20 +539,20 @@ class Cloud { // multiple rectangles stacked on/under each other
             }
             if (this.lines[i].y2 == this.lines[i].y1) { // fill in cloud
                 ctx.globalAlpha = 0.5;
-                ctx.fillStyle = gray(this.c-50);
-                ctx.fillRect(prevx,prevy,this.lines[i].x2-prevx,this.y-prevy)
+                ctx.fillStyle = gray(this.c - 50);
+                ctx.fillRect(prevx, prevy, this.lines[i].x2 - prevx, this.y - prevy)
                 ctx.globalAlpha = 1
             }
             prevx = this.lines[i].x2;
             prevy = this.lines[i].y2
 
             this.lines[i].draw()
-            
+
         }
     }
 
-    line(x1,y1,x2,y2) {
-        this.lines.push(new Scribble(x1,y1,x2,y2,gray(this.c),this.s))
+    line(x1, y1, x2, y2) {
+        this.lines.push(new Scribble(x1, y1, x2, y2, gray(this.c), this.s))
     }
 }
 
@@ -447,16 +570,16 @@ function build(layer) {
 }
 
 function buildDraw() {
-    for (let i = buildingLayers.length-1; i >=0; i--) {
+    for (let i = buildingLayers.length - 1; i >= 0; i--) {
         for (let j = 0; j < buildingLayers[i].length; j++) {
             buildingLayers[i][j].draw()
         }
-        
+
     }
 }
 
 function newCloud(x) {
-    new Cloud (x,Math.random()*GROUND_LEVEL*0.75,Math.random()*150+50,Math.random()*30+30,(200),1.5,Math.random()*2+0.5)
+    new Cloud(x, Math.random() * GROUND_LEVEL * 0.75, Math.random() * 150 + 50, Math.random() * 30 + 30, (200), 1.5, Math.random() * 2 + 0.5)
 }
 
 function cloudDraw() {
@@ -465,14 +588,145 @@ function cloudDraw() {
     }
 }
 
+let sun = {
+    w: 50,
+    h: 50
+}
+
+
+
+let sunrect = new Rect(c.width / 2 - sun.w / 2, 0, sun.w, sun.h, gray(240), 1.5, true, gray(255))
+class Moon {
+    constructor() {
+        this.x = c.width / 2 - sun.w / 2;
+        this.y = 0;
+        this.w = sun.w * 5 / 5;
+        this.h = sun.h;
+        this.scribs = []
+
+        let insetx = this.w/2
+        let insety = this.h/6
+        this.insetx = insetx;
+        this.insety=insety
+
+        this.scribs.push(new Scribble(this.x, this.y, this.x + this.w, this.y, gray(240), 1.5))
+        this.scribs.push(new Scribble(this.x, this.y, this.x, this.y + this.h, gray(240), 1.5))
+        this.scribs.push(new Scribble(this.x + this.w, this.y, this.x + this.w, this.y + insety, gray(240), 1.5))
+        this.scribs.push(new Scribble(this.x + this.w, this.y + insety, this.x + insetx, this.y + insety, gray(240), 1.5))
+        this.scribs.push(new Scribble(this.x + insetx, this.y + insety, this.x + insetx, this.y + (this.h-insety), gray(240), 1.5))
+        this.scribs.push(new Scribble(this.x + insetx, this.y + (this.h-insety), this.x + this.w, this.y + (this.h-insety), gray(240), 1.5))
+        this.scribs.push(new Scribble(this.x + this.w, this.y + (this.h-insety), this.x + this.w, this.y + this.h, gray(240), 1.5))
+        this.scribs.push(new Scribble(this.x , this.y + this.h, this.x + this.w, this.y + this.h, gray(240), 1.5))
+    }
+    draw() {
+        ctx.fillStyle = gray(240);
+        ctx.fillRect(this.x, this.y, this.w, this.insety)
+        ctx.fillRect(this.x, this.y, this.insetx, this.h)
+        ctx.fillRect(this.x, this.y+(this.h-this.insety), this.w, this.insety)
+        for (let i = 0; i < this.scribs.length; i++) {
+            this.scribs[i].draw()
+        }
+    }
+    moveTo(x, y) {
+        let dx = 0;
+        if (!x) {
+
+        } else {
+            dx = x - this.x
+            this.x = x;
+        }
+        let dy = 0;
+        if (!y) {
+
+        } else {
+            dy = y - this.y
+            this.y = y
+        }
+        for (let i = 0; i < this.scribs.length; i++) {
+            let s = this.scribs[i]
+            s.x1 += dx;
+            s.x2 += dx;
+            s.y1 += dy;
+            s.y2 += dy;
+        }
+    }
+}
+let stars = []
+class Star {
+    constructor() {
+        this.x = Math.random() * c.width;
+        this.y = Math.random() * GROUND_LEVEL;
+        this.dx, this.dy, this.dw, this.dh;
+        this.h = 1;
+        this.w=1
+        this.randomize()
+        this.c = Math.random() * 50 + 125
+
+        stars.push(this)
+    }
+    randomize() {
+        this.dx = Math.random() - 0.5;
+        this.dy = Math.random() - 0.5;
+        this.dw = Math.random()
+        this.dh = Math.random()
+    }
+
+    draw(c) {
+        if (SCRIBBLE_TICK == 0) {
+            this.randomize()
+        }
+        ctx.fillStyle = gray(this.c+c)
+        ctx.fillRect(this.x + this.dx, this.y + this.dy, this.w + this.dw, this.h + this.dh);
+    }
+}
+
+function createStars() {
+    for (let i = 0; i < 50; i++) {
+        new Star();
+    }
+}
+
+function drawStars() {
+    for (let i = 0; i < stars.length; i++) {
+        stars[i].draw()
+    }
+}
+
+createStars()
+
+let moon = new Moon()
+var backgroundColor = 0
+function skyDraw() {
+    let skymargin = 50
+    let maxtraveldist = GROUND_LEVEL - skymargin
+
+    let sunaxisp = Math.sqrt(sunaxis)
+    let moonaxisp = Math.sqrt(moonaxis)
+
+    if (!isnight) { // sun
+        let traveldist = 50 + (1 - sunaxisp) * maxtraveldist
+        sunrect.moveTo(false, traveldist)
+        sunrect.draw()
+
+        backgroundColor = 75 + sunaxisp * 75
+    } else { // moon
+        let traveldist = 50 + (1 - moonaxisp) * maxtraveldist
+        moon.moveTo(false, traveldist)
+        moon.draw()
+
+        backgroundColor = 75 - moonaxisp * 75
+        drawStars(75-backgroundColor)
+    }
+}
+
 let ground = new Scribble(0, GROUND_LEVEL, c.width, GROUND_LEVEL, gray(100), 4)
 
-for (let i = 0; i < 30; i++) {
+for (let i = 0; i < 5; i++) {
     build(Math.floor(Math.random() * buildingLayerAmt))
 }
 
-for (let i = 0; i < Math.random()*2+3; i++) {
-    newCloud(Math.random()*c.width)
+for (let i = 0; i < Math.random() * 2 + 3; i++) {
+    newCloud(Math.random() * c.width)
 }
 
 
@@ -482,21 +736,34 @@ var fps = Math.round(1000 / 30)
 
 // run loop
 var loop = setInterval(tick, fps);
-function tick() {
+function tick() { // gray(28)
     ctx.clearRect(0, 0, c.width, c.height);
-    ctx.fillStyle = gray(28)
+    ctx.fillStyle = gray(backgroundColor)
     ctx.fillRect(0, 0, c.width, c.height)
+
 
     SCRIBBLE_TICK += 1
     if (SCRIBBLE_TICK >= SCRIBBLE_CHANGE) {
         SCRIBBLE_TICK = 0;
 
         // randomly create cloud
-        if (Math.random() < 1/20) {
-            newCloud(-100*Math.random()-200)
+        if (Math.random() < 1 / 50) {
+            newCloud(-100 * Math.random() - 200)
         }
+
+        calculateTimes()
     }
+
+    skyDraw()
     cloudDraw()
     buildDraw()
+
+    ctx.fillStyle = gray(28)
+    ctx.fillRect(0, GROUND_LEVEL, c.width, c.height - GROUND_LEVEL)
     ground.draw()
 }
+
+document.addEventListener("mousemove", function (e) {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+})
